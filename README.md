@@ -17,7 +17,8 @@
 - **Flexible:** switch LLMs mid-session while preserving context
 - **Session-Based:** maintain multiple work sessions and contexts per project
 - **LSP-Enhanced:** Crush uses LSPs for additional context, just like you do
-- **Extensible:** add capabilities via MCPs (`http`, `stdio`, and `sse`)
+- **Skills Support:** built-in support for [Anthropic's Agent Skills Specification](https://docs.anthropic.com/en/docs/build-with-claude/agent-skills) - create reusable knowledge packages
+- **Extensible:** add capabilities via MCPs (`http`, `stdio`, and `sse`) or plugins
 - **Works Everywhere:** first-class support in every terminal on macOS, Linux, Windows (PowerShell and WSL), FreeBSD, OpenBSD, and NetBSD
 
 ## Installation

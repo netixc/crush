@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/crush/internal/plugin"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/session"
+	"github.com/charmbracelet/crush/internal/skills"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -251,6 +252,12 @@ func (app *App) initPlugins(ctx context.Context) error {
 			Permission: app.Permissions,
 		},
 		WorkingDir: app.config.WorkingDir(),
+	}
+
+	// Register built-in skills plugin
+	skillsPlugin := skills.NewPlugin()
+	if err := app.PluginRegistry.LoadPlugin(ctx, skillsPlugin, pluginCtx); err != nil {
+		return fmt.Errorf("failed to load skills plugin: %w", err)
 	}
 
 	// Load plugins from config
