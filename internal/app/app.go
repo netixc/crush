@@ -22,6 +22,7 @@ import (
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/plugin"
 	"github.com/charmbracelet/crush/internal/pubsub"
 	"github.com/charmbracelet/crush/internal/session"
 	"github.com/charmbracelet/x/ansi"
@@ -35,7 +36,8 @@ type App struct {
 
 	AgentCoordinator agent.Coordinator
 
-	LSPClients *csync.Map[string, *lsp.Client]
+	LSPClients     *csync.Map[string, *lsp.Client]
+	PluginRegistry *plugin.Registry
 
 	config *config.Config
 
@@ -62,11 +64,12 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 	}
 
 	app := &App{
-		Sessions:    sessions,
-		Messages:    messages,
-		History:     files,
-		Permissions: permission.NewPermissionService(cfg.WorkingDir(), skipPermissionsRequests, allowedTools),
-		LSPClients:  csync.NewMap[string, *lsp.Client](),
+		Sessions:       sessions,
+		Messages:       messages,
+		History:        files,
+		Permissions:    permission.NewPermissionService(cfg.WorkingDir(), skipPermissionsRequests, allowedTools),
+		LSPClients:     csync.NewMap[string, *lsp.Client](),
+		PluginRegistry: plugin.NewRegistry(),
 
 		globalCtx: ctx,
 
@@ -81,6 +84,11 @@ func New(ctx context.Context, conn *sql.DB, cfg *config.Config) (*App, error) {
 
 	// Initialize LSP clients in the background.
 	app.initLSPClients(ctx)
+
+	// Initialize plugins
+	if err := app.initPlugins(ctx); err != nil {
+		slog.Warn("Failed to initialize plugins", "error", err)
+	}
 
 	// cleanup database upon app shutdown
 	app.cleanupFuncs = append(app.cleanupFuncs, conn.Close)
@@ -221,12 +229,105 @@ func (app *App) setupEvents() {
 	setupSubscriber(ctx, app.serviceEventsWG, "history", app.History.Subscribe, app.events)
 	setupSubscriber(ctx, app.serviceEventsWG, "mcp", tools.SubscribeMCPEvents, app.events)
 	setupSubscriber(ctx, app.serviceEventsWG, "lsp", SubscribeLSPEvents, app.events)
+
+	// Setup plugin event forwarding
+	app.setupPluginEventForwarding(ctx)
+
 	cleanupFunc := func() error {
 		cancel()
 		app.serviceEventsWG.Wait()
 		return nil
 	}
 	app.cleanupFuncs = append(app.cleanupFuncs, cleanupFunc)
+}
+
+// initPlugins initializes all plugins from configuration
+func (app *App) initPlugins(ctx context.Context) error {
+	pluginCtx := plugin.PluginContext{
+		Config: app.config,
+		Services: plugin.Services{
+			Session:    app.Sessions,
+			Message:    app.Messages,
+			Permission: app.Permissions,
+		},
+		WorkingDir: app.config.WorkingDir(),
+	}
+
+	// Load plugins from config
+	loader := plugin.NewLoader(app.PluginRegistry)
+	if err := loader.LoadFromConfig(ctx, app.config, pluginCtx); err != nil {
+		return fmt.Errorf("failed to load plugins from config: %w", err)
+	}
+
+	// Trigger config hooks after plugins are loaded
+	if err := app.PluginRegistry.TriggerConfigHooks(ctx, app.config); err != nil {
+		return fmt.Errorf("failed to trigger config hooks: %w", err)
+	}
+
+	// Add plugin shutdown to cleanup functions
+	app.cleanupFuncs = append(app.cleanupFuncs, func() error {
+		return app.PluginRegistry.Shutdown(ctx)
+	})
+
+	slog.Info("Plugins initialized", "count", len(app.PluginRegistry.ListPlugins()))
+	return nil
+}
+
+// setupPluginEventForwarding forwards service events to plugin hooks
+func (app *App) setupPluginEventForwarding(ctx context.Context) {
+	// Forward session events to plugins
+	app.serviceEventsWG.Go(func() {
+		ch := app.Sessions.Subscribe(ctx)
+		for {
+			select {
+			case event, ok := <-ch:
+				if !ok {
+					return
+				}
+				switch event.Type {
+				case pubsub.CreatedEvent:
+					if err := app.PluginRegistry.TriggerSessionCreated(ctx, event.Payload); err != nil {
+						slog.Error("Plugin session created hook failed", "error", err)
+					}
+				case pubsub.UpdatedEvent:
+					if err := app.PluginRegistry.TriggerSessionUpdated(ctx, event.Payload); err != nil {
+						slog.Error("Plugin session updated hook failed", "error", err)
+					}
+				case pubsub.DeletedEvent:
+					if err := app.PluginRegistry.TriggerSessionDeleted(ctx, event.Payload.ID); err != nil {
+						slog.Error("Plugin session deleted hook failed", "error", err)
+					}
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
+
+	// Forward message events to plugins
+	app.serviceEventsWG.Go(func() {
+		ch := app.Messages.Subscribe(ctx)
+		for {
+			select {
+			case event, ok := <-ch:
+				if !ok {
+					return
+				}
+				switch event.Type {
+				case pubsub.CreatedEvent:
+					if err := app.PluginRegistry.TriggerMessageCreated(ctx, event.Payload); err != nil {
+						slog.Error("Plugin message created hook failed", "error", err)
+					}
+				case pubsub.UpdatedEvent:
+					if err := app.PluginRegistry.TriggerMessageUpdated(ctx, event.Payload); err != nil {
+						slog.Error("Plugin message updated hook failed", "error", err)
+					}
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
 }
 
 func setupSubscriber[T any](
@@ -276,6 +377,7 @@ func (app *App) InitCoderAgent(ctx context.Context) error {
 		app.Permissions,
 		app.History,
 		app.LSPClients,
+		app.PluginRegistry,
 	)
 	if err != nil {
 		slog.Error("Failed to create coder agent", "err", err)

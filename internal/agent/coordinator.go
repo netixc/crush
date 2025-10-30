@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/crush/internal/lsp"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
+	"github.com/charmbracelet/crush/internal/plugin"
 	"github.com/charmbracelet/crush/internal/session"
 	"golang.org/x/sync/errgroup"
 
@@ -55,12 +56,13 @@ type Coordinator interface {
 }
 
 type coordinator struct {
-	cfg         *config.Config
-	sessions    session.Service
-	messages    message.Service
-	permissions permission.Service
-	history     history.Service
-	lspClients  *csync.Map[string, *lsp.Client]
+	cfg            *config.Config
+	sessions       session.Service
+	messages       message.Service
+	permissions    permission.Service
+	history        history.Service
+	lspClients     *csync.Map[string, *lsp.Client]
+	pluginRegistry *plugin.Registry
 
 	currentAgent SessionAgent
 	agents       map[string]SessionAgent
@@ -76,15 +78,17 @@ func NewCoordinator(
 	permissions permission.Service,
 	history history.Service,
 	lspClients *csync.Map[string, *lsp.Client],
+	pluginRegistry *plugin.Registry,
 ) (Coordinator, error) {
 	c := &coordinator{
-		cfg:         cfg,
-		sessions:    sessions,
-		messages:    messages,
-		permissions: permissions,
-		history:     history,
-		lspClients:  lspClients,
-		agents:      make(map[string]SessionAgent),
+		cfg:            cfg,
+		sessions:       sessions,
+		messages:       messages,
+		permissions:    permissions,
+		history:        history,
+		lspClients:     lspClients,
+		pluginRegistry: pluginRegistry,
+		agents:         make(map[string]SessionAgent),
 	}
 
 	agentCfg, ok := cfg.Agents[config.AgentCoder]
@@ -379,6 +383,14 @@ func (c *coordinator) buildTools(ctx context.Context, agent config.Agent) ([]fan
 			}
 		}
 	}
+
+	// Add plugin tools
+	if c.pluginRegistry != nil {
+		pluginTools := c.pluginRegistry.GetPluginTools()
+		// Plugin tools are added without filtering - plugins control their own availability
+		filteredTools = append(filteredTools, pluginTools...)
+	}
+
 	slices.SortFunc(filteredTools, func(a, b fantasy.AgentTool) int {
 		return strings.Compare(a.Info().Name, b.Info().Name)
 	})

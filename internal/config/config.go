@@ -303,6 +303,8 @@ type Config struct {
 
 	Tools Tools `json:"tools,omitzero" jsonschema:"description=Tool configurations"`
 
+	Plugins []string `json:"plugins,omitempty" jsonschema:"description=Plugin paths to load (.so files or directories containing plugins)"`
+
 	Agents map[string]Agent `json:"-"`
 
 	// Internal
@@ -325,6 +327,14 @@ func (c *Config) EnabledProviders() []ProviderConfig {
 		}
 	}
 	return enabled
+}
+
+// GetPluginPaths returns the list of plugin paths from configuration
+func (c *Config) GetPluginPaths() []string {
+	if c.Plugins == nil {
+		return []string{}
+	}
+	return c.Plugins
 }
 
 // IsConfigured  return true if at least one provider is configured
