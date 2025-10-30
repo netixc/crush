@@ -7,8 +7,8 @@ package crushsdk
 import (
 	"context"
 
+	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/plugin"
-	"github.com/charmbracelet/fantasy"
 )
 
 // Re-export key types for plugin developers

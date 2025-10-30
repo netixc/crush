@@ -44,7 +44,7 @@ func (r *Registry) LoadPlugin(ctx context.Context, plugin Plugin, pluginCtx Plug
 	info := plugin.Info()
 
 	// Check if plugin is already loaded
-	if _, exists := r.plugins.Load(info.Name); exists {
+	if _, exists := r.plugins.Get(info.Name); exists {
 		return fmt.Errorf("plugin %s is already loaded", info.Name)
 	}
 
@@ -54,7 +54,7 @@ func (r *Registry) LoadPlugin(ctx context.Context, plugin Plugin, pluginCtx Plug
 	}
 
 	// Register the plugin
-	r.plugins.Store(info.Name, plugin)
+	r.plugins.Set(info.Name, plugin)
 
 	// Register all hooks
 	hooks := plugin.Hooks()
@@ -95,7 +95,7 @@ func (r *Registry) registerHooks(hooks Hooks) {
 
 // UnloadPlugin unloads a plugin by name
 func (r *Registry) UnloadPlugin(ctx context.Context, name string) error {
-	plugin, exists := r.plugins.Load(name)
+	plugin, exists := r.plugins.Get(name)
 	if !exists {
 		return fmt.Errorf("plugin %s is not loaded", name)
 	}
@@ -106,7 +106,7 @@ func (r *Registry) UnloadPlugin(ctx context.Context, name string) error {
 	}
 
 	// Remove from registry
-	r.plugins.Delete(name)
+	r.plugins.Del(name)
 
 	// Note: We don't remove hooks here because it would require rebuilding
 	// the hook arrays. In practice, plugins are loaded once at startup.
@@ -117,28 +117,26 @@ func (r *Registry) UnloadPlugin(ctx context.Context, name string) error {
 
 // GetPlugin retrieves a loaded plugin by name
 func (r *Registry) GetPlugin(name string) (Plugin, bool) {
-	return r.plugins.Load(name)
+	return r.plugins.Get(name)
 }
 
 // ListPlugins returns a list of all loaded plugins
 func (r *Registry) ListPlugins() []PluginInfo {
 	var infos []PluginInfo
-	r.plugins.Range(func(_ string, plugin Plugin) bool {
+	for _, plugin := range r.plugins.Seq2() {
 		infos = append(infos, plugin.Info())
-		return true
-	})
+	}
 	return infos
 }
 
 // Shutdown shuts down all loaded plugins
 func (r *Registry) Shutdown(ctx context.Context) error {
 	var errors []error
-	r.plugins.Range(func(name string, plugin Plugin) bool {
+	for name, plugin := range r.plugins.Seq2() {
 		if err := plugin.Shutdown(ctx); err != nil {
 			errors = append(errors, fmt.Errorf("plugin %s: %w", name, err))
 		}
-		return true
-	})
+	}
 
 	if len(errors) > 0 {
 		return fmt.Errorf("failed to shutdown %d plugin(s): %v", len(errors), errors)

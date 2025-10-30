@@ -3,11 +3,11 @@ package plugin
 import (
 	"context"
 
+	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/internal/config"
 	"github.com/charmbracelet/crush/internal/message"
 	"github.com/charmbracelet/crush/internal/permission"
 	"github.com/charmbracelet/crush/internal/session"
-	"github.com/charmbracelet/fantasy"
 )
 
 // Plugin is the main interface that all plugins must implement.

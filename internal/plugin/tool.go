@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 
-	"github.com/charmbracelet/fantasy"
+	"charm.land/fantasy"
 )
 
 // ToolProvider is an interface that plugins can implement to provide custom tools
@@ -24,12 +24,16 @@ type PluginTool interface {
 
 // pluginToolAdapter adapts a PluginTool to the fantasy.AgentTool interface
 type pluginToolAdapter struct {
-	tool PluginTool
+	tool            PluginTool
+	providerOptions fantasy.ProviderOptions
 }
 
 // NewAgentTool wraps a PluginTool to make it compatible with fantasy.AgentTool
 func NewAgentTool(tool PluginTool) fantasy.AgentTool {
-	return &pluginToolAdapter{tool: tool}
+	return &pluginToolAdapter{
+		tool:            tool,
+		providerOptions: make(fantasy.ProviderOptions),
+	}
 }
 
 func (a *pluginToolAdapter) Info() fantasy.ToolInfo {
@@ -40,19 +44,26 @@ func (a *pluginToolAdapter) Run(ctx context.Context, params fantasy.ToolCall) (f
 	return a.tool.Run(ctx, params)
 }
 
+func (a *pluginToolAdapter) ProviderOptions() fantasy.ProviderOptions {
+	return a.providerOptions
+}
+
+func (a *pluginToolAdapter) SetProviderOptions(opts fantasy.ProviderOptions) {
+	a.providerOptions = opts
+}
+
 // GetPluginTools extracts all custom tools from loaded plugins
 func (r *Registry) GetPluginTools() []fantasy.AgentTool {
 	var tools []fantasy.AgentTool
 
-	r.plugins.Range(func(_ string, plugin Plugin) bool {
+	for _, plugin := range r.plugins.Seq2() {
 		// Check if plugin implements ToolProvider
 		if toolProvider, ok := plugin.(ToolProvider); ok {
 			for _, pluginTool := range toolProvider.GetTools() {
 				tools = append(tools, NewAgentTool(pluginTool))
 			}
 		}
-		return true
-	})
+	}
 
 	return tools
 }

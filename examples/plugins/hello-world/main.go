@@ -19,8 +19,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"charm.land/fantasy"
 	"github.com/charmbracelet/crush/pkg/crushsdk"
-	"github.com/charmbracelet/fantasy"
 )
 
 // Plugin is the exported symbol that Crush will load
