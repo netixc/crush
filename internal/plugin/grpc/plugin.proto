@@ -1,0 +1,266 @@
+syntax = "proto3";
+
+package crush.plugin.v1;
+
+option go_package = "github.com/charmbracelet/crush/internal/plugin/grpc";
+
+// PluginService is the main service that plugin servers must implement
+service PluginService {
+  // GetInfo returns metadata about the plugin
+  rpc GetInfo(GetInfoRequest) returns (GetInfoResponse);
+
+  // Init initializes the plugin with context
+  rpc Init(InitRequest) returns (InitResponse);
+
+  // Shutdown shuts down the plugin
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+
+  // Hook method calls
+  rpc OnConfigLoad(OnConfigLoadRequest) returns (OnConfigLoadResponse);
+  rpc OnSessionCreated(OnSessionCreatedRequest) returns (OnSessionCreatedResponse);
+  rpc OnSessionUpdated(OnSessionUpdatedRequest) returns (OnSessionUpdatedResponse);
+  rpc OnSessionDeleted(OnSessionDeletedRequest) returns (OnSessionDeletedResponse);
+  rpc OnMessageCreated(OnMessageCreatedRequest) returns (OnMessageCreatedResponse);
+  rpc OnMessageUpdated(OnMessageUpdatedRequest) returns (OnMessageUpdatedResponse);
+  rpc OnPermissionRequest(OnPermissionRequestRequest) returns (OnPermissionRequestResponse);
+  rpc OnToolExecuteBefore(OnToolExecuteBeforeRequest) returns (OnToolExecuteBeforeResponse);
+  rpc OnToolExecuteAfter(OnToolExecuteAfterRequest) returns (OnToolExecuteAfterResponse);
+  rpc OnAgentStart(OnAgentStartRequest) returns (OnAgentStartResponse);
+  rpc OnAgentStep(OnAgentStepRequest) returns (OnAgentStepResponse);
+  rpc OnAgentFinish(OnAgentFinishRequest) returns (OnAgentFinishResponse);
+
+  // Tool service methods
+  rpc GetTools(GetToolsRequest) returns (GetToolsResponse);
+  rpc RunTool(RunToolRequest) returns (RunToolResponse);
+}
+
+// Common types
+
+message PluginInfo {
+  string name = 1;
+  string version = 2;
+  string description = 3;
+  string author = 4;
+}
+
+message PluginContext {
+  bytes config = 1; // JSON-encoded config
+  string working_dir = 2;
+}
+
+// GetInfo
+
+message GetInfoRequest {}
+
+message GetInfoResponse {
+  PluginInfo info = 1;
+}
+
+// Init
+
+message InitRequest {
+  PluginContext context = 1;
+}
+
+message InitResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+// Shutdown
+
+message ShutdownRequest {}
+
+message ShutdownResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+// OnConfigLoad
+
+message OnConfigLoadRequest {
+  bytes config = 1; // JSON-encoded config
+}
+
+message OnConfigLoadResponse {
+  bytes modified_config = 1; // JSON-encoded modified config (optional)
+  string error = 2;
+}
+
+// OnSessionCreated
+
+message OnSessionCreatedRequest {
+  string session_id = 1;
+  string parent_session_id = 2;
+  string title = 3;
+}
+
+message OnSessionCreatedResponse {
+  string error = 1;
+}
+
+// OnSessionUpdated
+
+message OnSessionUpdatedRequest {
+  string session_id = 1;
+  string title = 2;
+}
+
+message OnSessionUpdatedResponse {
+  string error = 1;
+}
+
+// OnSessionDeleted
+
+message OnSessionDeletedRequest {
+  string session_id = 1;
+}
+
+message OnSessionDeletedResponse {
+  string error = 1;
+}
+
+// OnMessageCreated
+
+message OnMessageCreatedRequest {
+  string message_id = 1;
+  string session_id = 2;
+  string role = 3;
+  bytes content = 4; // JSON-encoded message content
+}
+
+message OnMessageCreatedResponse {
+  string error = 1;
+}
+
+// OnMessageUpdated
+
+message OnMessageUpdatedRequest {
+  string message_id = 1;
+  bytes content = 2; // JSON-encoded message content
+}
+
+message OnMessageUpdatedResponse {
+  string error = 1;
+}
+
+// OnPermissionRequest
+
+message OnPermissionRequestRequest {
+  string session_id = 1;
+  string tool_call_id = 2;
+  string tool_name = 3;
+  string action = 4;
+  string description = 5;
+  bytes params = 6; // JSON-encoded params
+}
+
+message OnPermissionRequestResponse {
+  optional bool decision = 1; // true = allow, false = deny, null = no decision
+  string error = 2;
+}
+
+// OnToolExecuteBefore
+
+message OnToolExecuteBeforeRequest {
+  string tool_name = 1;
+  string session_id = 2;
+  string message_id = 3;
+  string tool_call_id = 4;
+  bytes arguments = 5; // JSON-encoded arguments
+}
+
+message OnToolExecuteBeforeResponse {
+  bytes modified_arguments = 1; // JSON-encoded modified arguments (optional)
+  string error = 2;
+}
+
+// OnToolExecuteAfter
+
+message OnToolExecuteAfterRequest {
+  string tool_name = 1;
+  string session_id = 2;
+  string message_id = 3;
+  string tool_call_id = 4;
+  bytes arguments = 5; // JSON-encoded arguments
+  string output = 6;
+  string error_message = 7;
+  bytes metadata = 8; // JSON-encoded metadata
+}
+
+message OnToolExecuteAfterResponse {
+  string modified_output = 1; // Modified output (optional)
+  bytes modified_metadata = 2; // JSON-encoded modified metadata (optional)
+  string error = 3;
+}
+
+// OnAgentStart
+
+message OnAgentStartRequest {
+  string session_id = 1;
+  string prompt = 2;
+  string model = 3;
+  string provider = 4;
+}
+
+message OnAgentStartResponse {
+  string error = 1;
+}
+
+// OnAgentStep
+
+message OnAgentStepRequest {
+  string session_id = 1;
+  int32 step_number = 2;
+  repeated ToolCall tool_calls = 3;
+  string response = 4;
+}
+
+message ToolCall {
+  string id = 1;
+  string name = 2;
+  bytes input = 3; // JSON-encoded input
+}
+
+message OnAgentStepResponse {
+  string error = 1;
+}
+
+// OnAgentFinish
+
+message OnAgentFinishRequest {
+  string session_id = 1;
+  int32 total_steps = 2;
+  string error_message = 3;
+}
+
+message OnAgentFinishResponse {
+  string error = 1;
+}
+
+// GetTools
+
+message GetToolsRequest {}
+
+message GetToolsResponse {
+  repeated ToolInfo tools = 1;
+}
+
+message ToolInfo {
+  string name = 1;
+  string description = 2;
+  bytes parameters = 3; // JSON schema for parameters
+}
+
+// RunTool
+
+message RunToolRequest {
+  string tool_name = 1;
+  string tool_call_id = 2;
+  bytes input = 3; // JSON-encoded input
+}
+
+message RunToolResponse {
+  string output = 1;
+  string error = 2;
+}
